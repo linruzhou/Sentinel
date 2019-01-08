@@ -179,6 +179,10 @@ public class ParamFlowRuleController {
         if (id == null || id <= 0) {
             return Result.ofFail(-1, "Invalid id");
         }
+        ParamFlowRuleEntity oldEntity = repository.findById(id);
+        if (oldEntity == null) {
+            return Result.ofFail(-1, "id " + id + " does not exist");
+        }
         Result<ParamFlowRuleEntity> checkResult = checkEntityInternal(entity);
         if (checkResult != null) {
             return checkResult;
@@ -188,7 +192,7 @@ public class ParamFlowRuleController {
         }
         entity.setId(id);
         Date date = new Date();
-        entity.setGmtCreate(null);
+        entity.setGmtCreate(oldEntity.getGmtCreate());
         entity.setGmtModified(date);
         try {
             entity = repository.save(entity);
@@ -239,7 +243,7 @@ public class ParamFlowRuleController {
     }
 
     private <R> Result<R> unsupportedVersion() {
-        return Result.ofFail(4041, "Sentinel client version not supported for parameter flow control");
+        return Result.ofFail(4041, "Sentinel client not supported for parameter flow control (unsupported version or dependency absent)");
     }
 
     private final SentinelVersion version020 = new SentinelVersion().setMinorVersion(2);
