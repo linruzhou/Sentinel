@@ -16,6 +16,7 @@
 package com.alibaba.csp.sentinel.demo.cluster.init;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import com.alibaba.csp.sentinel.cluster.ClusterStateManager;
@@ -58,14 +59,19 @@ public class DemoClusterInitFunc implements InitFunc {
 
     @Override
     public void init() throws Exception {
-        // Init token client related data source.
+        // Register client dynamic rule data source.
         initDynamicRuleProperty();
 
+        // Register token client related data source.
+        // Token client common config:
         initClientConfigProperty();
+        // Token client assign config (e.g. target token server) retrieved from assign map:
         initClientServerAssignProperty();
 
-        // Init token server related data source.
+        // Register token server related data source.
+        // Register dynamic rule data source supplier for token server:
         registerClusterRuleSupplier();
+        // Token server transport config extracted from assign map:
         initServerTransportConfigProperty();
 
         // Init cluster state property for extracting mode from cluster map data source.
@@ -101,15 +107,16 @@ public class DemoClusterInitFunc implements InitFunc {
 
     private void registerClusterRuleSupplier() {
         // Register cluster flow rule property supplier which creates data source by namespace.
+        // Flow rule dataId format: ${namespace}-flow-rules
         ClusterFlowRuleManager.setPropertySupplier(namespace -> {
             ReadableDataSource<String, List<FlowRule>> ds = new NacosDataSource<>(remoteAddress, groupId,
-                flowDataId, source -> JSON.parseObject(source, new TypeReference<List<FlowRule>>() {}));
+                namespace + DemoConstants.FLOW_POSTFIX, source -> JSON.parseObject(source, new TypeReference<List<FlowRule>>() {}));
             return ds.getProperty();
         });
         // Register cluster parameter flow rule property supplier which creates data source by namespace.
         ClusterParamFlowRuleManager.setPropertySupplier(namespace -> {
             ReadableDataSource<String, List<ParamFlowRule>> ds = new NacosDataSource<>(remoteAddress, groupId,
-                paramDataId, source -> JSON.parseObject(source, new TypeReference<List<ParamFlowRule>>() {}));
+                namespace + DemoConstants.PARAM_FLOW_POSTFIX, source -> JSON.parseObject(source, new TypeReference<List<ParamFlowRule>>() {}));
             return ds.getProperty();
         });
     }
@@ -147,8 +154,11 @@ public class DemoClusterInitFunc implements InitFunc {
         if (groupList.stream().anyMatch(this::machineEqual)) {
             return ClusterStateManager.CLUSTER_SERVER;
         }
+        // If current machine belongs to any of the token server group, then it's token client.
+        // Otherwise it's unassigned, should be set to NOT_STARTED.
         boolean canBeClient = groupList.stream()
             .flatMap(e -> e.getClientSet().stream())
+            .filter(Objects::nonNull)
             .anyMatch(e -> e.equals(getCurrentMachineId()));
         return canBeClient ? ClusterStateManager.CLUSTER_CLIENT : ClusterStateManager.CLUSTER_NOT_STARTED;
     }
@@ -180,6 +190,7 @@ public class DemoClusterInitFunc implements InitFunc {
     }
 
     private String getCurrentMachineId() {
+        // Note: this may not work well for container-based env.
         return HostNameUtil.getIp() + SEPARATOR + TransportConfig.getRuntimePort();
     }
 
